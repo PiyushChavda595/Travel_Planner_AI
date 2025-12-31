@@ -113,42 +113,69 @@ def plan_trip(source, destination, days=3):
 
 def pick_options(flight_index=None, hotel_index=None, days=3):
 
-    flights = session["last_flights"]
-    hotels = session["last_hotels"]
+    flights = session.get("last_flights", [])
+    hotels = session.get("last_hotels", [])
 
     if not flights or not hotels:
-        return "Please ask for a trip first 🙂"
+        return "Please search for a trip first 🙂"
 
     reply = ""
     total = 0
 
-    # Flight
+    # ---- Flight ---- #
     if flight_index and 1 <= flight_index <= len(flights):
         f = flights[flight_index - 1]
         reply += (
-            f"🛫 Your Flight\n"
+            f"🛫 **Selected Flight**\n"
             f"{f['airline']} ({f['flight_id']})\n"
             f"{f['from']} → {f['to']}\n"
-            f"₹{f['price']}\n\n"
+            f"Price: ₹{f['price']}\n\n"
         )
         total += f["price"]
     else:
         reply += "Invalid flight option.\n\n"
 
-    # Hotel
+    # ---- Hotel ---- #
     if hotel_index and 1 <= hotel_index <= len(hotels):
         h = hotels[hotel_index - 1]
         hotel_cost = h["price_per_night"] * days
         reply += (
-            f"🏨 Your Hotel\n"
+            f"🏨 **Selected Hotel**\n"
             f"{h['name']}\n"
-            f"₹{h['price_per_night']} × {days} nights\n"
-            f"₹{hotel_cost}\n\n"
+            f"₹{h['price_per_night']} × {days} nights = ₹{hotel_cost}\n\n"
         )
         total += hotel_cost
+        destination = h["city"]
     else:
         reply += "Invalid hotel option.\n\n"
+        destination = None
 
-    reply += f"💰 Estimated total: ₹{total}"
+    # ---- Weather ---- #
+    if destination:
+        weather = get_weather(destination)
+        reply += (
+            f"🌤 **Weather in {destination}**\n"
+            f"{weather['desc']} | {weather['temp']}°C\n\n"
+        )
+
+        # ---- Suggested Places ---- #
+        reply += "📍 **Places to Visit**\n"
+        for p in suggest_places(destination)[:5]:
+            reply += f"- {p['name']}\n"
+
+    # ---- Total ---- #
+    reply += f"\n💰 **Estimated Total for {days} days: ₹{total}**\n\n"
+
+    # ---- DAY-WISE ITINERARY ---- #
+    reply += "🗓 **Day-wise Itinerary**\n"
+
+    for d in range(1, days+1):
+        reply += (
+            f"\nDay {d}:\n"
+            f"- Breakfast at hotel\n"
+            f"- Visit local attractions\n"
+            f"- Try local food\n"
+            f"- Evening walk / shopping\n"
+        )
 
     return reply
