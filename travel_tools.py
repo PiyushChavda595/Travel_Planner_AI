@@ -182,16 +182,31 @@ def pick_options(flight_index=None, hotel_index=None, days=3):
     # ---- Total ---- #
     reply += f"\n💰 **Estimated Total for {days} days: ₹{total}**\n\n"
 
-    # ---- Day-wise Itinerary ---- #
-    reply += "🗓 **Day-wise Itinerary**\n"
+        # ---- Day-wise Itinerary using REAL PLACES ---- #
+    reply += "\n🗓 **Day-wise Itinerary**\n"
+
+    city_places = suggest_places(destination)
+
+    # fallback so it never crashes
+    if not city_places:
+        city_places = [{"name": "Local sightseeing"}, {"name": "Beach / Market Visit"}]
+
+    # spread places equally across days
+    per_day = max(1, len(city_places) // days)
+    index = 0
 
     for d in range(1, days + 1):
-        reply += (
-            f"\nDay {d}:\n"
-            f"- Breakfast at hotel\n"
-            f"- Visit local attractions\n"
-            f"- Try local food\n"
-            f"- Evening walk / shopping\n"
-        )
+        reply += f"\nDay {d}:\n"
+        reply += "- Breakfast at hotel\n"
+
+        # assign places to this day
+        todays = city_places[index:index + per_day]
+        index += per_day
+
+        for p in todays:
+            reply += f"- Visit: {p['name']}\n"
+
+        reply += "- Try local food\n"
+        reply += "- Evening walk / shopping\n"
 
     return reply
