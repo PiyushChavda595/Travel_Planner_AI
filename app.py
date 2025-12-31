@@ -1,115 +1,44 @@
 import streamlit as st
-from agent_setup import (
-    create_agent_executor,
-    plan_trip,
-    pick_options
-)
+from agent_setup import plan_trip, pick_options, build_itinerary
 
-# ----------------------------------------------------
-# Page UI
-# ----------------------------------------------------
 st.set_page_config(page_title="AI Travel Planner", page_icon="✈️")
 st.title("🌍 AI Travel Planner")
 
 
-# ----------------------------------------------------
-# Load API key
-# ----------------------------------------------------
-api_key = st.secrets.get("OPENAI_API_KEY")
-
-if not api_key:
-    with st.sidebar:
-        api_key = st.text_input("Enter your OpenAI API Key", type="password")
-
-if not api_key:
-    st.warning("Please enter your OpenAI API Key to continue.")
-    st.stop()
+msg = st.chat_input("Ask me anything about your trip...")
 
 
-# ----------------------------------------------------
-# Create Agent
-# ----------------------------------------------------
-if "agent_executor" not in st.session_state:
-    try:
-        st.session_state.agent_executor = create_agent_executor(api_key)
-    except Exception as e:
-        st.error(f"Agent creation failed: {e}")
-        st.stop()
+if msg:
 
+    st.chat_message("user").write(msg)
 
-# ----------------------------------------------------
-# Chat History
-# ----------------------------------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    text = msg.lower()
 
-
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
-
-
-# ----------------------------------------------------
-# Get user input
-# ----------------------------------------------------
-user_input = st.chat_input("Ask me about your travel plans...")
-
-if user_input:
-
-    # Show user message
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    st.chat_message("user").write(user_input)
-
-    reply_text = ""
-
-    # ------------------------------------------------
-    # Case 1 — user selects flights/hotels by number
-    # ------------------------------------------------
-    if "option" in user_input.lower():
-        nums = [int(s) for s in user_input.split() if s.isdigit()]
-        flight = nums[0] if len(nums) > 0 else None
+    # ----- pick option flow ----- #
+    if "option" in text:
+        nums = [int(s) for s in text.split() if s.isdigit()]
+        flight = nums[0] if nums else None
         hotel = nums[1] if len(nums) > 1 else None
+        reply = pick_options(flight, hotel)
 
-        reply_text = pick_options(flight, hotel)
+    # ----- budget itinerary flow ----- #
+    elif "budget" in text and "day" in text:
+        words = text.split()
+        days = int([w for w in words if "day" in w][0].replace("day", ""))
+        budget = int([w for w in words if w.isdigit()][0])
 
-    # ------------------------------------------------
-    # Case 2 — user asks for a trip plan
-    # ------------------------------------------------
-    elif "trip" in user_input.lower() and "to" in user_input.lower():
+        parts = text.split("from")[1].split("to")
+        source = parts[0].strip()
+        destination = parts[1].split("in")[0].strip()
 
-        text = user_input.lower()
+        reply = build_itinerary(source, destination, days, budget)
 
-        # simple extraction like:
-        # plan a trip from mumbai to delhi
-        try:
-            parts = text.split("from")[1].strip().split("to")
-            source = parts[0].strip().title()
-            destination = parts[1].strip().title()
-
-            reply_text = plan_trip(source, destination)
-
-        except Exception:
-            reply_text = "Sorry, I could not understand the cities. Please say like: Plan a trip from Mumbai to Delhi."
-
-    # ------------------------------------------------
-    # Case 3 — fallback to LangChain agent
-    # ------------------------------------------------
+    # ----- normal trip search ----- #
     else:
-        with st.spinner("Thinking..."):
-            try:
-                response = st.session_state.agent_executor.invoke(
-                    {"input": user_input}
-                )
-                reply_text = response["output"]
+        parts = text.split("from")[1].split("to")
+        source = parts[0].strip()
+        destination = parts[1].strip()
 
-            except Exception as e:
-                reply_text = f"Error: {e}"
+        reply = plan_trip(source, destination)
 
-    # ------------------------------------------------
-    # Show assistant reply
-    # ------------------------------------------------
-    st.chat_message("assistant").write(reply_text)
-
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": reply_text
-    })
+    st.chat_message("assistant").write(reply)
