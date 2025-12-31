@@ -5,6 +5,7 @@ import requests
 DATA_PATH = "dataset"
 
 
+# ---------------- Load JSON ---------------- #
 def load_json(name):
     with open(os.path.join(DATA_PATH, name)) as f:
         return json.load(f)
@@ -57,17 +58,19 @@ def get_weather(city):
     )
 
     try:
-        data = requests.get(url).json()
+        data = requests.get(url, timeout=10).json()
+
         return {
             "temp": round(data["main"]["temp"]),
             "desc": data["weather"][0]["description"].title()
         }
+
     except Exception:
         return {"temp": "--", "desc": "Unavailable"}
 
 
 # ===================================================
-#   MEMORY (keeps last results)
+#   MEMORY (keeps last results of search)
 # ===================================================
 
 session = {"last_flights": [], "last_hotels": []}
@@ -80,11 +83,13 @@ def plan_trip(source, destination, days=3):
     places = suggest_places(destination)
     weather = get_weather(destination)
 
+    # save results for later selection
     session["last_flights"] = flights
     session["last_hotels"] = hotels
 
     reply = ""
 
+    # ---- Flights ---- #
     if flights:
         reply += "✈️ Available Flights:\n"
         for i, f in enumerate(flights[:5], 1):
@@ -92,6 +97,7 @@ def plan_trip(source, destination, days=3):
     else:
         reply += "❌ No flights found.\n"
 
+    # ---- Hotels ---- #
     if hotels:
         reply += "\n🏨 Hotels:\n"
         for i, h in enumerate(hotels[:5], 1):
@@ -99,8 +105,10 @@ def plan_trip(source, destination, days=3):
     else:
         reply += "\n❌ No hotels found.\n"
 
+    # ---- Weather ---- #
     reply += f"\n🌦 Weather in {destination}: {weather['desc']} | {weather['temp']}°C\n"
 
+    # ---- Places ---- #
     if places:
         reply += "\n📍 Suggested Places:\n"
         for p in places[:5]:
@@ -110,6 +118,10 @@ def plan_trip(source, destination, days=3):
 
     return reply
 
+
+# ===================================================
+#   PICK OPTIONS → FULL FINAL TRIP SUMMARY
+# ===================================================
 
 def pick_options(flight_index=None, hotel_index=None, days=3):
 
@@ -121,6 +133,7 @@ def pick_options(flight_index=None, hotel_index=None, days=3):
 
     reply = ""
     total = 0
+    destination = None
 
     # ---- Flight ---- #
     if flight_index and 1 <= flight_index <= len(flights):
@@ -138,21 +151,24 @@ def pick_options(flight_index=None, hotel_index=None, days=3):
     # ---- Hotel ---- #
     if hotel_index and 1 <= hotel_index <= len(hotels):
         h = hotels[hotel_index - 1]
-        hotel_cost = h["price_per_night"] * days
+        hotel_cost = h['price_per_night'] * days
+
         reply += (
             f"🏨 **Selected Hotel**\n"
-            f"{h['name']}\n"
+            f"{h['name']} ({h['city']})\n"
             f"₹{h['price_per_night']} × {days} nights = ₹{hotel_cost}\n\n"
         )
+
         total += hotel_cost
         destination = h["city"]
+
     else:
         reply += "Invalid hotel option.\n\n"
-        destination = None
 
     # ---- Weather ---- #
     if destination:
         weather = get_weather(destination)
+
         reply += (
             f"🌤 **Weather in {destination}**\n"
             f"{weather['desc']} | {weather['temp']}°C\n\n"
@@ -166,10 +182,10 @@ def pick_options(flight_index=None, hotel_index=None, days=3):
     # ---- Total ---- #
     reply += f"\n💰 **Estimated Total for {days} days: ₹{total}**\n\n"
 
-    # ---- DAY-WISE ITINERARY ---- #
+    # ---- Day-wise Itinerary ---- #
     reply += "🗓 **Day-wise Itinerary**\n"
 
-    for d in range(1, days+1):
+    for d in range(1, days + 1):
         reply += (
             f"\nDay {d}:\n"
             f"- Breakfast at hotel\n"
