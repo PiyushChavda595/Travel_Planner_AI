@@ -1,7 +1,12 @@
-streamlit
-langchain==0.2.16
-langchain-core==0.2.38
-langchain-community==0.2.9
-langchain-openai
+streamlit==1.52.2
+
+# LangChain
+langchain==0.3.9
+langchain-openai==0.2.12
+
+# OpenAI SDK (must be v1+)
+openai==1.59.7
+
+# Needed by langchain 0.3.x
 pydantic==2.10.1
-openai==0.27.8
+python-dotenv
