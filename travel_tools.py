@@ -1,69 +1,78 @@
 import json
-from langchain.tools import tool
+import requests
+import streamlit as st
 
-# ---------- helpers ----------
+
+# -------- Load JSON utilities -------- #
+
 def load_json(path):
     with open(path, "r") as f:
         return json.load(f)
 
 
-@tool
-def search_flights(origin: str, destination: str) -> str:
-    """Search real flights from dataset"""
+# -------- Flights -------- #
+
+def search_flights(source, destination):
     flights = load_json("dataset/flights.json")
 
     matches = [
         f for f in flights
-        if f["source"].lower() == origin.lower()
-        and f["destination"].lower() == destination.lower()
+        if f["from"].lower() == source.lower()
+        and f["to"].lower() == destination.lower()
     ]
 
-    if not matches:
-        return f"No flights found from {origin} to {destination}"
-
-    # sort by price or duration if you like
-    matches = sorted(matches, key=lambda x: x["price"])
-
-    result = "✈️ Available Flights:\n\n"
-    for f in matches[:5]:  # show top 5
-        result += (
-            f"- {f['airline']} | ₹{f['price']} | "
-            f"{f['duration']} | Flight: {f['flight_number']}\n"
-        )
-
-    return result
+    return matches
 
 
-@tool
-def search_hotels(city: str) -> str:
-    """Search hotels from dataset"""
+# -------- Hotels -------- #
+
+def search_hotels(city):
     hotels = load_json("dataset/hotels.json")
 
-    matches = [
+    return [
         h for h in hotels
         if h["city"].lower() == city.lower()
     ]
 
-    if not matches:
-        return f"No hotels found in {city}"
 
-    matches = sorted(matches, key=lambda x: x["price_per_night"])
+# -------- Places -------- #
 
-    result = f"🏨 Hotels in {city}:\n\n"
-    for h in matches[:5]:
-        result += (
-            f"- {h['name']} | {h['stars']}⭐ | "
-            f"₹{h['price_per_night']}/night\n"
-        )
+def suggest_places(city):
+    places = load_json("dataset/places.json")
 
-    return result
+    return [
+        p for p in places
+        if p["city"].lower() == city.lower()
+    ]
 
 
-@tool
-def get_weather(city: str) -> str:
-    """Mock weather information"""
-    return f"Weather in {city}: Clear sky, 28°C"
+# -------- Coordinates -------- #
+
+def get_city_coords(city):
+    coords = load_json("dataset/city_coords.json")
+    return coords.get(city)
 
 
-def get_tools():
-    return [search_flights, search_hotels, get_weather]
+# -------- Live Weather -------- #
+# Needs OpenWeather API KEY in st.secrets["OPENWEATHER_KEY"]
+
+def get_weather(city):
+
+    api_key = st.secrets["OPENWEATHER_KEY"]
+
+    url = (
+        f"https://api.openweathermap.org/data/2.5/weather?"
+        f"q={city}&appid={api_key}&units=metric"
+    )
+
+    r = requests.get(url)
+
+    if r.status_code != 200:
+        return None
+
+    data = r.json()
+
+    return {
+        "temp": data["main"]["temp"],
+        "desc": data["weather"][0]["description"].title()
+    }
