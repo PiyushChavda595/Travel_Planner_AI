@@ -148,33 +148,71 @@ def plan_trip(source, destination, days=3):
     return reply
 
 
-def pick_options(flight_index=None, hotel_index=None):
+def pick_options(flight_index=None, hotel_index=None, days=3):
 
     flights = session.get("last_flights", [])
     hotels = session.get("last_hotels", [])
 
+    if not flights or not hotels:
+        return "Please ask for a trip first 🙂"
+
     reply = ""
 
+    total = 0
+
+    # --- Flight ---
     if flight_index and 1 <= flight_index <= len(flights):
         f = flights[flight_index - 1]
         reply += (
-            f"🛫 Selected Flight:\n"
+            f"🛫 **Your Flight**\n"
             f"{f['airline']} ({f['flight_id']})\n"
+            f"Route: {f['from']} → {f['to']}\n"
+            f"Departure: {f['departure_time']}\n"
+            f"Arrival: {f['arrival_time']}\n"
             f"Price: ₹{f['price']}\n\n"
         )
+        total += f["price"]
+    else:
+        reply += "Invalid flight option.\n\n"
 
+    # --- Hotel ---
     if hotel_index and 1 <= hotel_index <= len(hotels):
         h = hotels[hotel_index - 1]
-        reply += (
-            f"🏨 Selected Hotel:\n"
-            f"{h['name']}\n"
-            f"₹{h['price_per_night']} per night\n"
-        )
+        hotel_cost = h["price_per_night"] * days
 
-    if reply == "":
-        reply = "Please provide valid option numbers."
+        reply += (
+            f"🏨 **Your Hotel**\n"
+            f"{h['name']}\n"
+            f"City: {h['city']}\n"
+            f"₹{h['price_per_night']} per night × {days} nights\n"
+            f"Total Stay Cost: ₹{hotel_cost}\n\n"
+        )
+        total += hotel_cost
+    else:
+        reply += "Invalid hotel option.\n\n"
+
+    # --- Weather ---
+    destination = hotels[hotel_index - 1]["city"]
+    weather = get_weather(destination)
+
+    reply += (
+        f"🌤 **Weather in {destination}**\n"
+        f"{weather['desc']} | {weather['temp']}°C\n\n"
+    )
+
+    # --- Suggested places ---
+    places = suggest_places(destination)
+
+    if places:
+        reply += "📍 **Places to Visit**\n"
+        for p in places[:5]:
+            reply += f"- {p['name']}\n"
+
+    # --- Total trip cost ---
+    reply += f"\n💰 **Estimated Trip Cost (3 days): ₹{total}**"
 
     return reply
+
 
 
 # ===================================================
@@ -186,22 +224,22 @@ def get_tools():
 
     return [
         Tool(
-            name="Search Flights",
+            name="search_flights",
             func=lambda q: search_flights(q["from"], q["to"]),
             description="Find flights between two cities"
         ),
         Tool(
-            name="Search Hotels",
+            name="search_hotels",
             func=lambda q: search_hotels(q["city"]),
             description="Find hotels in a city"
         ),
         Tool(
-            name="Get Weather",
+            name="get_weather",
             func=lambda q: get_weather(q["city"]),
             description="Get live weather for a city"
         ),
         Tool(
-            name="Suggest Places",
+            name="suggest_places",
             func=lambda q: suggest_places(q["city"]),
             description="Tourist places in a city"
         ),
