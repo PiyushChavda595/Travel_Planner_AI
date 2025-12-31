@@ -2,26 +2,19 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-# ---- our local imports ---- #
 from travel_tools import (
-    get_tools,
     search_flights,
     search_hotels,
     suggest_places,
     get_weather,
+    plan_trip as json_plan_trip,
+    pick_options as json_pick,
 )
 
-# ---- memory to hold last search ---- #
-session = {
-    "last_flights": [],
-    "last_hotels": []
-}
+session = {"last_flights": [], "last_hotels": []}
 
 
-# =======================================================================
-# 1️⃣  LangChain Agent (used when LLM calls tools itself)
-# =======================================================================
-
+# ---------- LangChain agent (optional) ---------- #
 def create_agent_executor(api_key: str):
 
     llm = ChatOpenAI(
@@ -30,109 +23,78 @@ def create_agent_executor(api_key: str):
         temperature=0,
     )
 
-    tools = get_tools()
+    tools = []
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful AI travel assistant. Use tools when needed."),
+        ("system", "You are a helpful travel assistant."),
         ("human", "{input}"),
         MessagesPlaceholder("agent_scratchpad"),
     ])
 
     agent = create_tool_calling_agent(llm, tools, prompt)
 
-    executor = AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=True,
-    )
-
-    return executor
+    return AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 
-# =======================================================================
-# 2️⃣  Manual planner which uses our JSON + weather API directly
-# =======================================================================
-
-def plan_trip(source, destination, days=3):
+# ---------- Budgeted itinerary builder ---------- #
+def build_itinerary(source, destination, days, budget):
 
     flights = search_flights(source, destination)
     hotels = search_hotels(destination)
-    places = suggest_places(destination)
     weather = get_weather(destination)
+    places = suggest_places(destination)
 
-    # Save results for later selection
-    session["last_flights"] = flights
-    session["last_hotels"] = hotels
+    if not flights:
+        return "No flights found."
+    if not hotels:
+        return "No hotels found."
 
-    reply = ""
+    best_flight = flights[0]
+    best_hotel = hotels[0]
 
-    # ---- Flights ---- #
-    if flights:
-        reply += "✈️ Available Flights:\n"
-        for i, f in enumerate(flights[:10], 1):
-            reply += (
-                f"{i}. {f['airline']} "
-                f"({f['flight_id']}) — ₹{f['price']}\n"
-            )
+    hotel_cost = best_hotel["price_per_night"] * days
+    total = best_flight["price"] + hotel_cost
+
+    text = f"""
+🧳 Trip plan for {days} days
+{source.title()} → {destination.title()}
+
+✈️ Flight:
+{best_flight['airline']} ({best_flight['flight_id']})
+₹{best_flight['price']}
+
+🏨 Hotel:
+{best_hotel['name']}
+₹{best_hotel['price_per_night']} × {days} nights = ₹{hotel_cost}
+
+🌤 Weather:
+{weather['desc']} | {weather['temp']}°C
+
+📍 Places:
+"""
+
+    for p in places[:5]:
+        text += f"- {p['name']}\n"
+
+    text += f"\n💰 Total trip cost = ₹{total}\n"
+
+    if total <= budget:
+        text += "✅ Fits your budget!\n"
     else:
-        reply += "❌ No flights found.\n"
+        text += "⚠️ Above your budget. I can suggest cheaper options.\n"
 
-    # ---- Hotels ---- #
-    if hotels:
-        reply += "\n🏨 Hotels:\n"
-        for i, h in enumerate(hotels[:10], 1):
-            reply += (
-                f"{i}. {h['name']} — ₹{h['price_per_night']}/night\n"
-            )
-    else:
-        reply += "\n❌ No hotels found.\n"
+    text += "\n🗓 Itinerary\n"
 
-    # ---- Weather ---- #
-    if weather:
-        reply += (
-            f"\n🌦 Weather in {destination}: "
-            f"{weather['desc']} | {weather['temp']}°C\n"
-        )
+    for d in range(1, days+1):
+        text += f"\nDay {d}:\n- Sightseeing\n- Local food\n- Explore\n"
 
-    # ---- Places ---- #
-    if places:
-        reply += "\n📍 Suggested Places:\n"
-        for p in places[:10]:
-            reply += f"- {p['name']}\n"
-
-    reply += "\n💬 Reply like: option 2 flight + option 1 hotel"
-
-    return reply
+    return text
 
 
-# =======================================================================
-# 3️⃣  Select previously-listed options
-# =======================================================================
+# ---------- Simple wrappers ---------- #
+def plan_trip(source, destination):
+    return json_plan_trip(source, destination)
 
-def pick_options(flight_index=None, hotel_index=None):
 
-    flights = session.get("last_flights", [])
-    hotels = session.get("last_hotels", [])
-
-    reply = ""
-
-    if flight_index and 1 <= flight_index <= len(flights):
-        f = flights[flight_index - 1]
-        reply += (
-            f"🛫 Selected Flight:\n"
-            f"{f['airline']} ({f['flight_id']})\n"
-            f"Price: ₹{f['price']}\n\n"
-        )
-
-    if hotel_index and 1 <= hotel_index <= len(hotels):
-        h = hotels[hotel_index - 1]
-        reply += (
-            f"🏨 Selected Hotel:\n"
-            f"{h['name']}\n"
-            f"₹{h['price_per_night']} per night\n"
-        )
-
-    if reply == "":
-        reply = "Please provide valid option numbers."
-
-    return reply
+def pick_options(flight_index, hotel_index, days=3):
+    return json_pick(flight_index, hotel_index, days)
